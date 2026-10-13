@@ -1,0 +1,51 @@
+# Apple treatment, Access workspace
+
+Design review date: **2026-10-12**. The user wants Apple's visual language while keeping Access's familiar spatial organization: commands across the top, object navigation at the left, open object tabs above the central workspace, and datasheets or SQL/results in that workspace. The current Java Swing/Aqua shell can deliver a considerably calmer Mac desktop interface without a shell rewrite. It does not provide AppKit's native toolbar, sidebar materials, or Liquid Glass; describe it as a Mac-styled independent workspace.
+
+Official references were checked through Apple's current [Human Interface Guidelines](https://developer.apple.com/design/human-interface-guidelines), including official indexed content where the landing pages require JavaScript. Recommendations below are project choices unless explicitly attributed to Apple; dimensions are starting values for visual verification, not claimed HIG mandates.
+
+## Required visual changes
+
+| Area | Observed source problem | Concrete implementation target |
+|---|---|---|
+| Window and header | A large maroon branding strip duplicates the window title; explanatory product text competes with database content | Keep macOS title-bar controls and the existing screen menu. Replace the strip with a compact neutral header: database filename, small Working Copy or Read Only status, and a File Details button. Keep original/working/backup paths available in details for recovery. |
+| Commands | Centered Aqua tabs, broad text pills, and repeated groups consume height and attention | Preserve Access category names but present a left-aligned, compact category row and one command row. Active category uses text weight and a subtle indicator. Keep normal Aqua buttons or restrained custom toolbar controls; reserve accent for the principal Run action. Move About and infrequent commands into menus. |
+| Sidebar | Generic white tree and unstructured emphasis resemble a prototype | Use a softly contrasting neutral surface, concise Objects heading, searchable object names, disclosure groups, and small consistent independent vector glyphs. Retain selected object as focus moves into its content. Default width around230px, adjustable divider, View → Show/Hide Sidebar. |
+| Object tabs | Another prominent tab strip adds competing navigation | Keep open-object tabs separate from command categories. Use compact tab labels, clear selected state and discoverable Close Object action. Long names must remain recognizable through truncation/tooltips. |
+| Datasheets | Hardcoded pink selection ignores system accent/focus state | Use platform selection foreground/background and distinguish focused from inactive selection. Keep columns resizable, meaningful headers, restrained gridlines, subtle alternating rows, and sensible alignment. SQL results and writable records must have visibly distinct context. |
+| Status and limitations | Full path rows and broad implementation messages occupy scarce content space | Use one quiet status line for row counts, busy progress, truncation or read-only state. Explain unsupported operations near the relevant object/action and in details, without repeatedly filling the workspace with project commentary. |
+
+Apple advises choosing toolbar items deliberately, limiting groups to roughly three, separating text actions, and reducing custom toolbar backgrounds/tints. This supports the compact command row and restrained accent choice. Swing does not automatically supply AppKit toolbar overflow; the project must ensure that its own command row fits at the minimum supported width and that less-frequent actions remain available in menus. [Toolbars](https://developer.apple.com/design/human-interface-guidelines/toolbars).
+
+Apple recommends succinct sidebar group labels, disclosure controls for hierarchy, usually no more than two hierarchy levels, and a discoverable way to hide/show the sidebar. Icon color should respect user accent choices where feasible. The existing Objects → Tables/Queries/Forms/Reports/Modules grouping fits that structure. [Sidebars](https://developer.apple.com/design/human-interface-guidelines/sidebars).
+
+Apple's macOS table guidance supports sortable headings where useful, user-resizable columns, alternating backgrounds for tracking wide rows, descriptive column headings, and persistent navigation selection. Sorting must stay a view operation; it must not change record identity used by prepared edits. [Lists and tables](https://developer.apple.com/design/human-interface-guidelines/lists-and-tables).
+
+## Typography, spacing, and color
+
+Use the installed platform UI font through Swing's system look and feel rather than embedding a downloaded Apple font. Start with13pt controls/content,12pt secondary labels and11pt short status/captions; avoid10pt operational explanations. Keep SQL in a legible monospaced font around13–14pt. Favor regular weight, using semibold/bold only for the current database or section hierarchy. Apple's system-font guidance emphasizes legibility and adaptation; these exact Swing sizes are our starting choices. [Apple fonts overview](https://developer.apple.com/documentation/technologyoverviews/fonts).
+
+Use an8px spacing rhythm, with12–16px content edges and around6–8px separation between toolbar controls. Keep sidebar rows around28px and table rows around26–28px, then verify long/non-Latin names and scaled displays. Avoid a rounded card around every region: one clean divider between navigation and content and subtle boundaries between header, tabs and workspace are sufficient.
+
+Prefer semantic `UIManager` colors when available. Static light neutrals are an acceptable limited fallback, but hardcoded white surfaces and dark text are not evidence of dark-mode support. Retain maroon as a small product accent, not a large permanent surface or universal selection color. Unavailable/read-only states require text or icon cues as well as color.
+
+## Keyboard and accessibility requirements
+
+Toolbar controls remain keyboard focusable and draw a visible focus outline. Category buttons distinguish focus, selection and hover. Any replacement category control must support keyboard activation, expose an accessible name and selected state, and remain usable without a mouse. Maintain menu equivalents and existing Command shortcuts. Expose sidebar search and the navigation tree with meaningful labels; preserve normal arrow-key/disclosure behavior.
+
+Focused list selection should use the accent treatment; inactive selection should remain visible with a subdued treatment. Do not remove the focus ring merely to flatten the interface. Apple explicitly distinguishes focus and selection states and recommends auditing accessibility. VoiceOver behavior and contrast still require local checks; source code alone cannot establish them. [Focus and selection](https://developer.apple.com/design/human-interface-guidelines/focus-and-selection), [Accessibility](https://developer.apple.com/design/human-interface-guidelines/accessibility).
+
+## Review and acceptance checkpoint
+
+Baseline source inspected: `src/main/java/org/accessformac/ui/AccessForMacApp.java`, including `titleStrip`, `ribbonPage`, `group`, `button`, path display and table styling. Supplied Access and earlier Mac screenshots were reviewed locally and are excluded from public history because their redistribution rights are unverified. The earlier Mac screenshot confirms excessive top chrome, centered category pills and large empty branding; the Access screenshot establishes the top commands/left navigation/central object-tab-and-datasheet organization. The desktop agent's planned neutral header, compact categories, simpler sidebar and flatter object tabs agree with this review.
+
+Before considering the redesign verified, capture the actual running app with a database open, a selected table, and a SQL/results tab. Check the minimum960px window width for clipped/wrapped commands; keyboard access from category row through sidebar, tabs, editor and grid; persistent selected-object context; native menu availability; path-details recovery; and readable disabled/read-only states. Preserve engine behavior and all object tabs while changing presentation. Dark mode, VoiceOver, different accent settings and scaled displays remain separate checks until observed. A polished screenshot proves its shown state, not every interaction or native material implementation.
+
+
+## Supplied Apple Design skill adaptation
+
+A user-supplied Apple design document was consulted locally; it is excluded from public history. Public design references are the official Apple HIG and AppKit documentation linked above. It primarily translates WWDC principles into web interfaces; its CSS/Pointer Events/spring recipes are not direct Swing APIs. Apply its purpose, familiarity, spatial consistency, immediate feedback, readable typography and restraint to **Lattice**. Keep SQL/database operations off the event thread, retain ordinary press/selection feedback and direct splitter dragging, and avoid artificial transition delays. The custom Run SQL button includes distinct pressed, disabled and focus states.
+
+Use a distinctive original interlocking lattice mark with a clear small-size silhouette, appropriate to the new name. The logo and packaging must not copy Microsoft or Apple branding. Keep actual system controls, screen menus and focus behavior where possible. Do not add costly simulated blur or continuous animations to a data-work interface; optional material depth must remain legible and inexpensive, with an opaque fallback. No native Liquid Glass claim is warranted without a supported native implementation.
+
+Revised source already removes the large maroon banner/full-path row, reduces command groups, adds a neutral filename/badge header and searchable sidebar, and uses restrained vector glyphs. The refinement uses explicit command labels, distinct action/object glyphs, contextual enabled states, persistent sidebar selection/disclosure state, horizontal toolbar overflow, and search shortcuts. Long names, keyboard navigation and final assembled-window behavior still require runtime checks. Final visual checks require the revised running Lattice build, not the earlier reference screenshot.

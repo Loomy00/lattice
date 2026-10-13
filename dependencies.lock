@@ -1,0 +1,4 @@
+# SHA256 filename Maven-Central-URL; resolved 2026-10-12; Jackcess POI optional OLE support excluded
+c798411dd2010dc34f999f21a826f00a2d7f5534f671051131422c2612f89d17 ucanaccess-5.1.8.jar https://repo.maven.apache.org/maven2/io/github/spannm/ucanaccess/5.1.8/ucanaccess-5.1.8.jar
+854bc38ec2bd934b66bdd222c938ccb52aeac7f02684cb0db78bd0089e67f8a1 jackcess-5.1.7.jar https://repo.maven.apache.org/maven2/io/github/spannm/jackcess/5.1.7/jackcess-5.1.7.jar
+5fab2bb4384ac06b762638c8fa2740c944b8d080e4796c0c6c2af8b90dd4e5ad hsqldb-2.7.4.jar https://repo.maven.apache.org/maven2/org/hsqldb/hsqldb/2.7.4/hsqldb-2.7.4.jar

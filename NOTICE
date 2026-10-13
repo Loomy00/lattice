@@ -1,0 +1,12 @@
+Lattice is an independent project for working with Microsoft Access-format
+databases. It is not affiliated with, endorsed by, or distributed by Microsoft
+Corporation or Apple Inc. Microsoft, Microsoft Access, and other referenced
+product names are trademarks of their respective owners.
+
+No open-source license has yet been selected for Lattice's original code,
+documentation, or branding. Public repository visibility does not itself grant
+a general reuse license. See LEGAL.md for scope and licensing status.
+
+Third-party components retain their own licenses and notices. See
+licenses/THIRD-PARTY.md and the full license files in licenses/. This notice
+does not change those terms.

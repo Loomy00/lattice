@@ -1,0 +1,602 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.basepom</groupId>
+        <artifactId>basepom-oss</artifactId>
+        <version>69</version>
+    </parent>
+
+    <groupId>io.github.spannm</groupId>
+    <artifactId>ucanaccess</artifactId>
+    <version>5.1.8</version>
+    <packaging>jar</packaging>
+
+    <name>UCanAccess</name>
+    <description>Actively maintained, pure Java JDBC driver for Microsoft Access databases (.mdb, .accdb) requiring no native libraries. A maintained fork of the unmaintained net.sf.ucanaccess project, built on current Jackcess and HSQLDB versions with Java 11/17/21 support. Used by Java applications and JDBC client programs (e.g. OpenOffice, LibreOffice, SQuirreL SQL) to read and write Microsoft Access databases.</description>
+    <url>${githubBaseUrl}${project.artifactId}</url>
+    <inceptionYear>2012</inceptionYear>
+
+    <organization>
+        <name>UCanAccess</name>
+        <url>${project.url}</url>
+    </organization>
+
+    <licenses>
+        <license>
+            <name>The Apache License, Version 2.0</name>
+            <url>https://www.apache.org/licenses/LICENSE-2.0</url>
+        </license>
+    </licenses>
+
+    <developers>
+        <developer>
+            <id>${developerId}</id>
+            <name>Markus Spann</name>
+            <email>spannm@outlook.de</email>
+            <organizationUrl>${githubBaseUrl}</organizationUrl>
+            <timezone>+1</timezone>
+        </developer>
+
+        <developer>
+            <id>marco-amadei</id>
+            <name>Marco Amadei</name>
+            <email>amadei.mar@gmail.com</email>
+            <roles>
+                <role>developer emeritus</role>
+            </roles>
+        </developer>
+        <developer>
+            <name>Gord Thompson</name>
+            <email>gordonthompson@users.sf.net</email>
+            <roles>
+                <role>developer emeritus</role>
+            </roles>
+        </developer>
+    </developers>
+
+    <scm>
+        <connection>scm:git:ssh://git@github.com/${developerId}/${project.artifactId}.git</connection>
+        <developerConnection>scm:git:ssh://git@github.com/${developerId}/${project.artifactId}.git</developerConnection>
+        <url>https://github.com/${developerId}/${project.artifactId}/tree/master</url>
+        <tag>ucanaccess-5.1.8</tag>
+    </scm>
+
+    <issueManagement>
+        <system>Github</system>
+        <url>${project.url}/issues</url>
+    </issueManagement>
+
+    <distributionManagement>
+        <snapshotRepository>
+            <id>central</id>
+            <name>Sonatype Central Snapshots</name>
+            <url>${basepom.deploy.snapshot.url}</url>
+        </snapshotRepository>
+        <repository>
+            <id>central</id>
+            <name>Sonatype Central Staging Repository</name>
+            <url>https://central.sonatype.com</url>
+        </repository>
+        <site>
+            <id>local</id>
+            <name>Local Maven site</name>
+            <url>file://${java.io.tmpdir}/${project.artifactId}/site-prepared</url>
+        </site>
+    </distributionManagement>
+
+    <properties>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+
+        <!-- The minimum JDK version required to build. -->
+        <project.build.systemJdk>11</project.build.systemJdk>
+        <!-- The default build target. -->
+        <project.build.targetJdk>11</project.build.targetJdk>
+
+        <developerId>spannm</developerId>
+        <githubBaseUrl>https://github.com/${developerId}/</githubBaseUrl>
+
+        <module.name>${project.groupId}.${project.artifactId}</module.name>
+
+        <ucanaccess.console.main>net.ucanaccess.console.Main</ucanaccess.console.main>
+        <uber.jar.classifier.name>uber</uber.jar.classifier.name>
+
+        <dep.jackcess.version>5.1.7</dep.jackcess.version>
+
+        <dep.hsqldb.version>2.7.4</dep.hsqldb.version>
+        <dep.hsqldb.classifier />
+
+        <dep.slf4j.version>2.0.18</dep.slf4j.version>
+
+        <!-- test dependencies -->
+        <dep.junit.version>5.14.4</dep.junit.version>
+        <dep.assertj.version>3.27.7</dep.assertj.version>
+        <dep.mockito.version>5.23.0</dep.mockito.version>
+        <dep.log4j-to-slf4j.version>2.26.1</dep.log4j-to-slf4j.version>
+
+        <dep.plugin.maven-fluido-skin.version>2.1.0</dep.plugin.maven-fluido-skin.version>
+
+        <!-- additional plugins not defined in parent -->
+        <dep.plugin.sortpom.version>4.0.0</dep.plugin.sortpom.version>
+        <dep.plugin.cyclonedx.version>2.9.3</dep.plugin.cyclonedx.version>
+        <dep.plugin.versions.version>2.21.0</dep.plugin.versions.version>
+        <dep.plugin.figlet.version>1.0.0</dep.plugin.figlet.version>
+
+        <basepom.deploy.snapshot.url>https://central.sonatype.com/repository/maven-snapshots/</basepom.deploy.snapshot.url>
+
+        <!-- the current "minimal" version of maven -->
+        <basepom.maven.version>3.9.0</basepom.maven.version>
+
+        <basepom.check.skip-checkstyle>false</basepom.check.skip-checkstyle>
+        <basepom.check.skip-pmd>false</basepom.check.skip-pmd>
+        <dep.checkstyle.version>10.26.1</dep.checkstyle.version>
+        <basepom.check.skip-spotbugs>true</basepom.check.skip-spotbugs>
+        <basepom.check.skip-license>true</basepom.check.skip-license>
+        <basepom.check.skip-dependency>false</basepom.check.skip-dependency>
+        <basepom.check.fail-dependency>false</basepom.check.fail-dependency>
+
+        <basepom.javadoc.skip>false</basepom.javadoc.skip>
+        <basepom.javadoc.show>protected</basepom.javadoc.show>
+
+        <basepom.site.scm.branch>master</basepom.site.scm.branch>
+        <basepom.site.skip-deploy>false</basepom.site.skip-deploy>
+    </properties>
+
+    <dependencies>
+
+        <dependency>
+            <groupId>org.hsqldb</groupId>
+            <artifactId>hsqldb</artifactId>
+            <version>${dep.hsqldb.version}</version>
+            <classifier>${dep.hsqldb.classifier}</classifier>
+        </dependency>
+
+        <dependency>
+            <groupId>io.github.spannm</groupId>
+            <artifactId>jackcess</artifactId>
+            <version>${dep.jackcess.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-to-slf4j</artifactId>
+            <version>${dep.log4j-to-slf4j.version}</version>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-jdk-platform-logging</artifactId>
+            <version>${dep.slf4j.version}</version>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-simple</artifactId>
+            <version>${dep.slf4j.version}</version>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>${dep.junit.version}</version>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+            <version>${dep.assertj.version}</version>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-core</artifactId>
+            <version>${dep.mockito.version}</version>
+            <scope>test</scope>
+        </dependency>
+
+    </dependencies>
+
+    <build>
+
+        <defaultGoal>clean verify</defaultGoal>
+
+        <pluginManagement>
+
+            <plugins>
+
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-compiler-plugin</artifactId>
+                    <configuration>
+                        <compilerArgument>-Xlint:all</compilerArgument>
+                    </configuration>
+                </plugin>
+
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-surefire-plugin</artifactId>
+                    <configuration>
+                        <systemPropertyVariables>
+                            <user.timezone />
+                        </systemPropertyVariables>
+
+                        <failIfNoTests>true</failIfNoTests>
+                        <trimStackTrace>true</trimStackTrace>
+                        <printSummary>true</printSummary>
+                        <testFailureIgnore>false</testFailureIgnore>
+
+                        <forkCount>1</forkCount>
+                        <reuseForks>true</reuseForks>
+                        <forkedProcessTimeoutInSeconds>600</forkedProcessTimeoutInSeconds>
+
+                        <argLine>@{basepom.coverage.test-args} -Xmx2048m -Dfile.encoding=UTF-8</argLine>
+                    </configuration>
+                </plugin>
+
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-checkstyle-plugin</artifactId>
+                    <configuration>
+                        <configLocation>src/test/resources/team/checkstyle-rules.xml</configLocation>
+                    </configuration>
+                    <dependencies>
+                        <dependency>
+                            <groupId>com.puppycrawl.tools</groupId>
+                            <artifactId>checkstyle</artifactId>
+                            <version>${dep.checkstyle.version}</version>
+                        </dependency>
+                    </dependencies>
+                </plugin>
+
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-pmd-plugin</artifactId>
+                    <configuration>
+                        <rulesets>
+                            <ruleset>src/test/resources/team/pmd-rules.xml</ruleset>
+                        </rulesets>
+                    </configuration>
+                </plugin>
+
+                <plugin>
+                    <groupId>com.github.ekryd.sortpom</groupId>
+                    <artifactId>sortpom-maven-plugin</artifactId>
+                    <version>${dep.plugin.sortpom.version}</version>
+                    <configuration>
+                        <createBackupFile>false</createBackupFile>
+                        <expandEmptyElements>false</expandEmptyElements>
+                        <nrOfIndentSpace>4</nrOfIndentSpace>
+                    </configuration>
+                </plugin>
+
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-jar-plugin</artifactId>
+                    <configuration>
+                        <archive>
+                            <manifestEntries combine.children="append">
+                                <Automatic-Module-Name>${module.name}</Automatic-Module-Name>
+                            </manifestEntries>
+                        </archive>
+                    </configuration>
+                </plugin>
+
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-javadoc-plugin</artifactId>
+                    <configuration>
+                        <additionalOptions combine.children="append">
+                            <additionalOption>--add-exports</additionalOption>
+                            <additionalOption>org.hsqldb/org.hsqldb=${module.name}</additionalOption>
+                            <additionalOption>--add-exports</additionalOption>
+                            <additionalOption>org.hsqldb/org.hsqldb.error=${module.name}</additionalOption>
+                            <additionalOption>--add-exports</additionalOption>
+                            <additionalOption>org.hsqldb/org.hsqldb.types=${module.name}</additionalOption>
+                        </additionalOptions>
+                    </configuration>
+                </plugin>
+
+                <plugin>
+                    <!-- CycloneDX Maven Plugin
+                         https://cyclonedx.github.io/cyclonedx-maven-plugin -->
+                    <groupId>org.cyclonedx</groupId>
+                    <artifactId>cyclonedx-maven-plugin</artifactId>
+                    <version>${dep.plugin.cyclonedx.version}</version>
+                    <executions>
+                        <execution>
+                            <id>cyclonedx-makebom</id>
+                            <goals>
+                                <goal>makeBom</goal>
+                            </goals>
+                            <phase>package</phase>
+                        </execution>
+                    </executions>
+                    <configuration>
+                        <projectType>library</projectType>
+                        <skipNotDeployed>false</skipNotDeployed>
+                        <outputFormat>xml</outputFormat>
+                        <outputName>sbom</outputName>
+                        <verbose>false</verbose>
+                    </configuration>
+                </plugin>
+
+            </plugins>
+
+        </pluginManagement>
+
+        <plugins>
+
+            <plugin>
+                <groupId>io.github.spannm</groupId>
+                <artifactId>figlet-maven-plugin</artifactId>
+                <version>${dep.plugin.figlet.version}</version>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>render</goal>
+                        </goals>
+                    </execution>
+                </executions>
+                <configuration>
+                     <content><![CDATA[
+                         <lineBreak/><lineBreak/>
+                         <figletFont name="slant">${project.name}</figletFont>
+                         <preserveWhitespace>    v${project.version}</preserveWhitespace><lineBreak/><lineBreak/>
+                     ]]></content>
+                </configuration>
+            </plugin>
+
+            <plugin>
+                <!-- central-publishing-maven-plugin is the official tool for publishing artifacts to the new Sonatype Central Portal -->
+                <groupId>org.sonatype.central</groupId>
+                <artifactId>central-publishing-maven-plugin</artifactId>
+
+                <!-- The <extensions>true</extensions> attribute tells Maven to include the plugin's code in the build lifecycle,
+                     allowing it to hook into specific phases and extend Maven's default behavior.
+                     This lets the plugin take over the standard deploy goal and implement its own logic for deploying to the new Sonatype Central Portal. -->
+                <extensions>true</extensions>
+                <configuration>
+                    <skipPublishing>false</skipPublishing>
+                    <publishingServerId>central</publishingServerId>
+                    <!-- do not automatically release staged artifacts to Maven Central.
+                         This is the recommended setting for releases, as it allows us to manually inspect the staged repository
+                         in the Central Portal before officially publishing.
+                         For Snapshots, this parameter has no effect, as they are immediately available upon deployment. -->
+                    <autoPublish>false</autoPublish>
+
+                    <!-- instructs the plugin to wait until Sonatype's portal validates the artifacts.
+                         This ensures that the build doesn't complete until the artifacts have passed initial quality checks.
+                         Other options like ready or published can be used to control the waiting time. -->
+                    <waitUntil>validated</waitUntil>
+
+                    <!-- let build fail if a publishing error occurs.
+                         This is a crucial safety measure to prevent incomplete or incorrect artifacts from being left in a staged repository -->
+                    <failOnBuildFailure>true</failOnBuildFailure>
+
+                    <!-- generates all available checksum types (e.g., MD5, SHA-1, SHA-256) for the deployed artifacts -->
+                    <checksums>all</checksums>
+                </configuration>
+            </plugin>
+
+            <plugin>
+                <!-- Create a shaded jar in system temp for inclusion in the distrib-zip assembly -->
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-shade-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>uber-jar</id>
+                        <goals>
+                            <goal>shade</goal>
+                        </goals>
+                        <phase>package</phase>
+                        <configuration>
+                            <outputDirectory>${java.io.tmpdir}</outputDirectory>
+                            <shadedArtifactAttached>true</shadedArtifactAttached>
+                            <shadedClassifierName>${uber.jar.classifier.name}</shadedClassifierName>
+                            <createDependencyReducedPom>false</createDependencyReducedPom>
+                            <minimizeJar>false</minimizeJar>
+
+                            <transformers>
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                                    <mainClass>${ucanaccess.console.main}</mainClass>
+                                </transformer>
+                            </transformers>
+
+                            <!-- exclude selected Jars to reduce size of the Uber jar -->
+                            <filters>
+                                <filter>
+                                    <artifact>*:*</artifact>
+                                    <excludes>
+                                        <!-- special handling for the META-INF directory -->
+                                        <exclude>META-INF/maven/**</exclude>
+                                        <exclude>META-INF/*.SF</exclude>
+                                        <exclude>META-INF/*.DSA</exclude>
+                                        <exclude>META-INF/*.RSA</exclude>
+                                    </excludes>
+                                </filter>
+                            </filters>
+
+                            <artifactSet>
+                                <excludes>
+                                    <exclude>org.apache.poi:poi</exclude>
+                                    <exclude>commons-codec:commons-codec</exclude>
+                                    <exclude>org.apache.commons:commons-collections4</exclude>
+                                    <exclude>org.apache.commons:commons-math3</exclude>
+                                    <exclude>commons-io:commons-io</exclude>
+                                    <exclude>com.zaxxer:SparseBitSet</exclude>
+                                    <exclude>org.apache.logging.log4j</exclude>
+                                </excludes>
+                            </artifactSet>
+
+                            <relocations>
+                                <relocation>
+                                    <pattern>${project.groupId}</pattern>
+                                    <shadedPattern>shaded.${project.groupId}</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>org.hsqldb</pattern>
+                                    <shadedPattern>shaded.org.hsqldb</shadedPattern>
+                                </relocation>
+                            </relocations>
+
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <plugin>
+                <artifactId>maven-assembly-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <!-- mvn org.apache.maven.plugins:maven-assembly-plugin:single@distrib-zip-assembly -->
+                        <id>distrib-zip-assembly</id>
+                        <goals>
+                            <goal>single</goal>
+                        </goals>
+                        <phase>package</phase>
+                        <configuration>
+                            <descriptors>
+                                <descriptor>src/main/assembly/distrib-zip-assembly.xml</descriptor>
+                            </descriptors>
+                            <appendAssemblyId>true</appendAssemblyId>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>versions-maven-plugin</artifactId>
+                <version>${dep.plugin.versions.version}</version>
+                <configuration>
+                    <ruleSet>
+                        <ignoreVersions>
+                            <ignoreVersion>
+                                <type>regex</type>
+                                <version>.*(?i)(alpha|beta|rc|cr|preview|milestone|[mb][0-9]+).*</version>
+                            </ignoreVersion>
+                        </ignoreVersions>
+                    </ruleSet>
+                </configuration>
+            </plugin>
+
+            <plugin>
+                <groupId>org.cyclonedx</groupId>
+                <artifactId>cyclonedx-maven-plugin</artifactId>
+            </plugin>
+
+        </plugins>
+
+    </build>
+
+    <profiles>
+
+        <profile>
+            <id>fast</id>
+            <!-- profile to skip time-consuming steps -->
+            <activation>
+                <activeByDefault>false</activeByDefault>
+            </activation>
+            <properties>
+                <!-- skip _compiling_ the tests -->
+                <maven.test.skip>true</maven.test.skip>
+                <!-- skip execution of tests -->
+                <skipTests>true</skipTests>
+
+                <maven.javadoc.skip>true</maven.javadoc.skip>
+                <basepom.check.skip-extended>true</basepom.check.skip-extended>
+                <cyclonedx.skip>true</cyclonedx.skip>
+            </properties>
+        </profile>
+
+        <profile>
+            <id>github-deploy-snapshot-package</id>
+            <distributionManagement>
+                <snapshotRepository>
+                    <id>github</id>
+                    <name>${developerId} github packages</name>
+                    <url>https://maven.pkg.github.com/${developerId}/${project.artifactId}</url>
+                </snapshotRepository>
+            </distributionManagement>
+        </profile>
+
+        <profile>
+            <id>add-sonatype-snapshots-repo</id>
+            <activation>
+                <property>
+                    <name>performRelease</name>
+                    <value>!true</value>
+                </property>
+            </activation>
+            <repositories>
+                <repository>
+                    <snapshots>
+                        <enabled>true</enabled>
+                    </snapshots>
+                    <id>sonatype-nexus-snapshots</id>
+                    <name>Sonatype Nexus Snapshots</name>
+                    <url>${basepom.deploy.snapshot.url}</url>
+                </repository>
+            </repositories>
+        </profile>
+
+        <profile>
+            <id>add-project-local-maven-repo</id>
+            <!-- Profile to activate a local Maven repository in .m2-local-repo under the project's base dir.
+                 You must ensure the desired artificat(s) do not exist in the 'main' local m2 repository i.e. $HOME/.m2/repository/ -->
+            <activation>
+                <property>
+                    <name>performRelease</name>
+                    <value>!true</value>
+                </property>
+            </activation>
+            <repositories>
+                <repository>
+                    <snapshots>
+                        <enabled>true</enabled>
+                    </snapshots>
+                    <id>project-local-maven-repo-defined-in-pom</id>
+                    <name>Local file system Maven Repo for debugging</name>
+                    <url>file://${project.basedir}/.m2-local-repo/</url>
+                </repository>
+            </repositories>
+        </profile>
+
+        <profile>
+            <id>release</id>
+            <activation>
+                <property>
+                    <name>performRelease</name>
+                    <value>true</value>
+                </property>
+            </activation>
+            <build>
+                <plugins>
+
+                    <plugin>
+                        <artifactId>maven-enforcer-plugin</artifactId>
+                        <configuration>
+                            <rules>
+                                <requireProperty>
+                                    <property>dep.hsqldb.classifier</property>
+                                    <regex>^$</regex>
+                                    <regexMessage>hsqldb classifier must be blank during release (property dep.hsqldb.classifier)</regexMessage>
+                                </requireProperty>
+                            </rules>
+                        </configuration>
+                    </plugin>
+
+                </plugins>
+            </build>
+        </profile>
+
+    </profiles>
+
+</project>

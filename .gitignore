@@ -1,0 +1,30 @@
+# Local builds, downloaded libraries and generated database evidence.
+/build/
+/lib/
+*.class
+*.jar
+*.accdb
+*.mdb
+*.accde
+*.accdu
+*.laccdb
+*.ldb
+*.original-backup
+*.pre-query-*
+*.exe
+*.dll
+*.msi
+.DS_Store
+.env
+.env.*
+*.pem
+*.key
+
+# Supplied reference material has no confirmed redistribution license.
+/docs/references/
+/docs/apple-design/
+/ACCESS_FOR_MAC.md
+
+# Raw local logs contain machine paths. Summarized checks remain in docs.
+/fixtures/*verification.txt
+/fixtures/native-query-investigation.txt
