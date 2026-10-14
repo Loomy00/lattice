@@ -4,11 +4,12 @@ import io.github.spannm.jackcess.*;
 import net.ucanaccess.jdbc.UcanaccessConnection;
 import java.io.IOException;
 import java.nio.file.*;
+import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.sql.*;
 import java.util.*;
 
-/** Native Access file operations. Every session edits a fresh copy and retains its original backup. */
+/** Native Access operations with verified recovery backups before opening for edits. */
 public final class AccessDatabase implements AutoCloseable {
     public record ColumnInfo(String name, String type, boolean nullable, boolean primaryKey) {}
     public record QueryResult(List<String> columns, List<List<Object>> rows, int updateCount, boolean truncated) {}
@@ -18,20 +19,98 @@ public final class AccessDatabase implements AutoCloseable {
     public record RelationshipInfo(String name, String fromTable, String toTable, List<String> fromColumns, List<String> toColumns,
                                    boolean referentialIntegrity, boolean cascadeUpdates, boolean cascadeDeletes) {}
     public static final int ROW_LIMIT = 5000;
-    private final Path original, working;
+    private final Path original, working, recoveryBackup;
+    private final boolean direct;
     private UcanaccessConnection connection;
     private final boolean readOnly;
     private final List<String> limitations;
     private boolean closed;
 
-    private AccessDatabase(Path original, Path working, UcanaccessConnection connection,
-                           boolean readOnly, List<String> limitations) {
+    private AccessDatabase(Path original, Path working, Path recoveryBackup, boolean direct,
+                           UcanaccessConnection connection, boolean readOnly, List<String> limitations) {
         this.original = original; this.working = working; this.connection = connection;
+        this.recoveryBackup = recoveryBackup; this.direct = direct;
         this.readOnly = readOnly; this.limitations = List.copyOf(limitations);
     }
 
-    public static AccessDatabase openCopy(Path original, Path workingCopy) throws Exception {
+    /** Open and edit the selected file. Reopening unchanged bytes reuses its recovery snapshot. */
+    public static AccessDatabase open(Path original) throws Exception {
+        Path source = sourcePath(original);
+        if (source.toString().contains(";")) throw new IOException("A database path containing ';' cannot be safely passed to JDBC.");
+        byte[] sourceHash = digest(source);
+        Capabilities capabilities = inspectCapabilities(source);
+        if (!Arrays.equals(sourceHash, digest(source)))
+            throw new IOException("Database changed during compatibility inspection; close other editors and retry.");
+        Path backup = recoverySnapshot(source, sourceHash);
+        if (!Arrays.equals(sourceHash, digest(source)))
+            throw new IOException("Database changed while preparing recovery; close other editors and retry.");
+        UcanaccessConnection conn = connect(source, capabilities.readOnly());
+        return new AccessDatabase(source, source, backup, true, conn, capabilities.readOnly(), capabilities.limitations());
+    }
+
+    private static Path sourcePath(Path original) throws IOException {
         Path source = original.toRealPath();
+        String extension = source.getFileName().toString().toLowerCase(Locale.ROOT);
+        if (!extension.endsWith(".accdb") && !extension.endsWith(".mdb"))
+            throw new IOException("Choose an actual .accdb or .mdb file.");
+        if (!Files.isRegularFile(source)) throw new IOException("Choose a regular Access database file.");
+        return source;
+    }
+
+    private static Path recoverySnapshot(Path source, byte[] sourceHash) throws Exception {
+        String configured = System.getProperty("access.backupDirectory");
+        Path root = configured == null || configured.isBlank()
+            ? Path.of(System.getProperty("user.home"), "Library", "Application Support", "Lattice", "Recovery Backups")
+            : Path.of(configured).toAbsolutePath().normalize();
+        // Use a separate folder, including when the source is in Home and AppSupport is below it.
+        if (root.toAbsolutePath().normalize().equals(source.getParent()))
+            throw new IOException("Choose a recovery backup directory outside the database folder.");
+        Files.createDirectories(root);
+        root = root.toRealPath();
+        if (root.equals(source.getParent()))
+            throw new IOException("Choose a recovery backup directory outside the database folder.");
+        String pathKey = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+            .digest(source.toString().getBytes(StandardCharsets.UTF_8)));
+        Path directory = root.resolve(pathKey);
+        Files.createDirectories(directory);
+        directory = directory.toRealPath();
+        if (directory.equals(source.getParent()))
+            throw new IOException("Choose a recovery backup directory outside the database folder.");
+        String extension = source.toString().toLowerCase(Locale.ROOT).endsWith(".mdb") ? ".mdb" : ".accdb";
+        Path backup = directory.resolve(HexFormat.of().formatHex(sourceHash) + extension);
+        if (backup.equals(source) || (Files.exists(backup, LinkOption.NOFOLLOW_LINKS) && Files.isSameFile(backup, source)))
+            throw new IOException("Recovery backup must be a separate file from the selected database.");
+        if (!Files.exists(backup, LinkOption.NOFOLLOW_LINKS)) {
+            Path temporary = Files.createTempFile(directory, ".recovery-", ".tmp");
+            try {
+                Files.copy(source, temporary, StandardCopyOption.REPLACE_EXISTING);
+                if (!Arrays.equals(sourceHash, digest(temporary)) || !Arrays.equals(sourceHash, digest(source)))
+                    throw new IOException("Source changed while backing up; close other editors and retry.");
+                try { Files.move(temporary, backup); }
+                catch (FileAlreadyExistsException concurrentSnapshot) { /* Verify the winning snapshot below. */ }
+            } finally { Files.deleteIfExists(temporary); }
+        }
+        if (!Files.isRegularFile(backup, LinkOption.NOFOLLOW_LINKS) || !Arrays.equals(sourceHash, digest(backup)))
+            throw new IOException("Recovery backup verification failed; the selected database was not opened: " + backup);
+        return backup;
+    }
+
+    private static UcanaccessConnection connect(Path path, boolean readOnly) throws Exception {
+        Class.forName("net.ucanaccess.jdbc.UcanaccessDriver");
+        UcanaccessConnection conn = null;
+        try {
+            conn = (UcanaccessConnection) DriverManager.getConnection("jdbc:ucanaccess://" + path
+                + ";memory=true;immediatelyReleaseResources=true;openExclusive=true");
+            conn.setReadOnly(readOnly);
+            return conn;
+        } catch (Exception | LinkageError failed) {
+            if (conn != null) try { conn.close(); } catch (Exception closeFailed) { failed.addSuppressed(closeFailed); }
+            throw failed;
+        }
+    }
+
+    public static AccessDatabase openCopy(Path original, Path workingCopy) throws Exception {
+        Path source = sourcePath(original);
         Path copy = workingCopy.toAbsolutePath().normalize();
         String extension = source.getFileName().toString().toLowerCase(Locale.ROOT);
         if (!extension.endsWith(".accdb") && !extension.endsWith(".mdb"))
@@ -56,12 +135,9 @@ public final class AccessDatabase implements AutoCloseable {
             Capabilities capabilities=inspectCapabilities(copy);
             if(!Arrays.equals(sourceHash,digest(copy)) || !Arrays.equals(sourceHash,digest(source)))
                 throw new IOException("Database changed during compatibility inspection; close other editors and retry.");
-            Class.forName("net.ucanaccess.jdbc.UcanaccessDriver");
-            String url = "jdbc:ucanaccess://" + copy + ";memory=true;immediatelyReleaseResources=true;openExclusive=true";
-            conn = (UcanaccessConnection) DriverManager.getConnection(url);
-            conn.setReadOnly(capabilities.readOnly());
-            return new AccessDatabase(source, copy, conn, capabilities.readOnly(), capabilities.limitations());
-        } catch (Exception failed) {
+            conn = connect(copy, capabilities.readOnly());
+            return new AccessDatabase(source, copy, backup, false, conn, capabilities.readOnly(), capabilities.limitations());
+        } catch (Exception | LinkageError failed) {
             if(conn!=null)try{conn.close();}catch(Exception closeFailed){failed.addSuppressed(closeFailed);}
             if(createdCopy)try{Files.deleteIfExists(copy);}catch(Exception cleanupFailed){failed.addSuppressed(cleanupFailed);}
             if(createdBackup)try{Files.deleteIfExists(backup);}catch(Exception cleanupFailed){failed.addSuppressed(cleanupFailed);}
@@ -136,6 +212,8 @@ public final class AccessDatabase implements AutoCloseable {
     }
     public Path originalPath() { return original; }
     public Path workingPath() { return working; }
+    public boolean isDirect() { return direct; }
+    public Path recoveryBackupPath() { return recoveryBackup; }
     public boolean isReadOnly() { return readOnly; }
     public List<String> limitations() { return limitations; }
     private void requireOpen() throws SQLException { if (closed) throw new SQLException("Database is closed."); }
@@ -373,8 +451,7 @@ public final class AccessDatabase implements AutoCloseable {
         return true;
     }
     private void reconnect() throws Exception {
-        connection=(UcanaccessConnection)DriverManager.getConnection("jdbc:ucanaccess://"+working+";memory=true;immediatelyReleaseResources=true;openExclusive=true");
-        connection.setReadOnly(readOnly);closed=false;
+        connection=connect(working,readOnly);closed=false;
     }
     public synchronized void flush() throws Exception { requireOpen(); connection.getDbIO().flush(); }
     public synchronized void close() throws Exception {

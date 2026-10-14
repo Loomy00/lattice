@@ -21,10 +21,96 @@ public final class DatabaseProof {
         throw new AssertionError("Expected failure: " + label);
     }
     @FunctionalInterface interface RunnableWithException { void run() throws Exception; }
+    private static void directOpenProof(Path dir) throws Exception {
+        Path sourceDirectory = Files.createDirectory(dir.resolve("direct-source"));
+        Path source = sourceDirectory.resolve("Music.accdb");
+        AccessDatabase.createSample(source);
+        byte[] initialHash = hash(source);
+        Path backups = dir.resolve("direct-recovery");
+        String previous = System.getProperty("access.backupDirectory");
+        System.setProperty("access.backupDirectory", backups.toString());
+        try {
+            Path initialBackup;
+            try (AccessDatabase db = AccessDatabase.open(source)) {
+                check(db.isDirect() && db.originalPath().equals(source.toRealPath()) && db.workingPath().equals(source.toRealPath()),
+                    "Normal open directly addresses the selected database");
+                check(db.tables().equals(List.of("Customers", "Orders")), "Direct open reads native tables");
+                initialBackup = db.recoveryBackupPath();
+                check(initialBackup.startsWith(backups) && !initialBackup.startsWith(sourceDirectory)
+                    && Arrays.equals(initialHash, hash(initialBackup)), "Direct open verifies initial recovery bytes outside the source folder");
+            }
+            check(Arrays.equals(initialHash, hash(source)), "Read-only activity in a direct session preserves source bytes");
+            try (AccessDatabase db = AccessDatabase.open(source)) {
+                check(db.recoveryBackupPath().equals(initialBackup), "Unchanged direct reopen reuses the existing recovery snapshot");
+                check(db.updateRecord("Customers", Map.of("CustomerID", 1), "Notes", "Direct 'prepared'; 東京") == 1,
+                    "Direct session supports prepared record editing");
+            }
+            try (Database nativeDb = new DatabaseBuilder(source).withReadOnly(true).open()) {
+                check(nativeDb.getTable("Customers").iterator().next().get("Notes").equals("Direct 'prepared'; 東京"),
+                    "Direct prepared edit persists in the selected native file");
+            }
+            check(Arrays.equals(initialHash, hash(initialBackup)), "Initial direct recovery snapshot remains unchanged after editing");
+            Path changedBackup;
+            try (AccessDatabase db = AccessDatabase.open(source)) {
+                changedBackup = db.recoveryBackupPath();
+                check(!changedBackup.equals(initialBackup) && Arrays.equals(hash(source), hash(changedBackup)),
+                    "Changed file receives a new verified recovery version on next open");
+                check(scalar(db, "SELECT Notes FROM Customers WHERE CustomerID=1").equals("Direct 'prepared'; 東京"),
+                    "Direct edit survives normal reopen");
+            }
+            try (AccessDatabase db = AccessDatabase.open(source)) {
+                check(db.recoveryBackupPath().equals(changedBackup), "Repeated unchanged direct open reuses the latest recovery version");
+            }
+            try (var files = Files.list(sourceDirectory)) {
+                check(files.map(p -> p.getFileName().toString()).filter(name -> !name.equals("Music.laccdb")).toList().equals(List.of("Music.accdb")),
+                    "Repeated direct open creates no working copies or backups beside the selected file");
+            }
+            try (var files = Files.walk(backups)) {
+                check(files.filter(Files::isRegularFile).count() == 2, "Direct recovery history contains only the two distinct file versions");
+            }
+            byte[] editedHash = hash(source);
+            Files.write(changedBackup, new byte[]{1, 2, 3});
+            expectFailure(() -> AccessDatabase.open(source), "Corrupt existing recovery snapshot prevents direct opening");
+            check(Arrays.equals(editedHash, hash(source)), "Rejected corrupt recovery leaves selected source bytes unchanged");
+            System.setProperty("access.backupDirectory", sourceDirectory.toString());
+            expectFailure(() -> AccessDatabase.open(source), "Direct recovery directory cannot be the selected file folder");
+            check(Arrays.equals(editedHash, hash(source)), "Rejected recovery directory leaves selected source unchanged");
+            Path nestedRecovery = sourceDirectory.resolve("Application Support/Recovery");
+            System.setProperty("access.backupDirectory", nestedRecovery.toString());
+            Path nestedSnapshot;
+            try (AccessDatabase db = AccessDatabase.open(source)) {
+                nestedSnapshot = db.recoveryBackupPath();
+                check(nestedSnapshot.startsWith(nestedRecovery) && Arrays.equals(editedHash, hash(nestedSnapshot)),
+                    "Separate recovery subfolder supports a database in an ancestor folder such as Home");
+            }
+            Files.delete(nestedSnapshot); Files.createLink(nestedSnapshot, source);
+            expectFailure(() -> AccessDatabase.open(source), "A hard link to the selected database cannot count as a recovery backup");
+            check(Arrays.equals(editedHash, hash(source)), "Rejected same-file recovery leaves selected database bytes unchanged");
+            System.setProperty("access.backupDirectory", backups.toString());
+            Path unsafe = sourceDirectory.resolve("unsafe;music.accdb"); Files.copy(source, unsafe);
+            expectFailure(() -> AccessDatabase.open(unsafe), "Direct opening rejects JDBC delimiter paths");
+            check(Arrays.equals(editedHash, hash(unsafe)), "Rejected direct path remains byte-identical");
+            Path wrong = sourceDirectory.resolve("music.sqlite"); Files.copy(source, wrong);
+            expectFailure(() -> AccessDatabase.open(wrong), "Direct opening rejects non-Access extensions");
+            Path mdb = sourceDirectory.resolve("Music.mdb"); AccessDatabase.createBlank(mdb);
+            try (AccessDatabase db = AccessDatabase.open(mdb)) {
+                check(db.isDirect() && !db.isReadOnly(), "Normal open supports native editable MDB");
+                db.execute("CREATE TABLE Tracks (ID COUNTER PRIMARY KEY, Title TEXT(80))");
+                db.insertRecord("Tracks", Map.of("Title", "Direct MDB"));
+            }
+            try (AccessDatabase db = AccessDatabase.open(mdb)) {
+                check(scalar(db, "SELECT Title FROM Tracks").equals("Direct MDB"), "Native MDB direct edits persist on reopening");
+            }
+        } finally {
+            if (previous == null) System.clearProperty("access.backupDirectory");
+            else System.setProperty("access.backupDirectory", previous);
+        }
+    }
     public static void main(String[] args) throws Exception {
         Path root = Path.of("").toAbsolutePath();
         Path scratch = root.resolve("../../work/database-proof").normalize(); Files.createDirectories(scratch);
         Path dir = Files.createTempDirectory(scratch,"run-");
+        directOpenProof(dir);
         Path blank = dir.resolve("new-project/Blank.accdb");
         AccessDatabase.createBlank(blank);
         byte[] blankHash = hash(blank);
@@ -58,6 +144,7 @@ public final class DatabaseProof {
         Path original = dir.resolve("original.accdb"), working = dir.resolve("practice.accdb");
         AccessDatabase.createSample(original); byte[] originalHash = hash(original);
         try (AccessDatabase db = AccessDatabase.openCopy(original,working)) {
+            check(!db.isDirect() && db.recoveryBackupPath().equals(AccessDatabase.backupPath(working)), "Explicit copy mode retains its adjacent original backup contract");
             check(db.tables().equals(List.of("Customers","Orders")),"Native sample tables");
             check(db.columns("Customers").get(0).primaryKey(),"Native primary key metadata");
             check(db.columns("Customers").get(0).type().equals("AUTONUMBER"),"Native autonumber metadata");
@@ -160,6 +247,9 @@ public final class DatabaseProof {
         try (Database nativeDb=new DatabaseBuilder(linked).open()) { nativeDb.createLinkedTable("ExternalCustomers",original.toString(),"Customers"); }
         expectFailure(()->AccessDatabase.openCopy(linked,dir.resolve("linked-copy.accdb")),"Linked table refused before external resolution");
         check(!Files.exists(dir.resolve("linked-copy.accdb")),"Rejected linked database leaves no working file");
+        byte[] linkedHash = hash(linked);
+        expectFailure(() -> AccessDatabase.open(linked), "Direct linked database refused before JDBC resolves external data");
+        check(Arrays.equals(linkedHash, hash(linked)), "Rejected direct linked file stays byte-identical");
         // A separate large fixture validates explicit row-cap signalling.
         Path large=dir.resolve("large.accdb"); AccessDatabase.createSample(large);
         try (Database nativeDb=new DatabaseBuilder(large).open()) {
@@ -264,10 +354,25 @@ public final class DatabaseProof {
             check(db.isReadOnly()&&db.limitations().stream().anyMatch(x->x.contains("SyntheticUnsupportedForm")),"Application container child forces read only without relying on guessed Type numbers");
             expectFailure(()->db.execute("UPDATE Customers SET City='bypassed'"),"Unsupported application object refuses action SQL");
         }
+        byte[] applicationHash = hash(appObject);
+        String priorBackupDirectory = System.getProperty("access.backupDirectory");
+        System.setProperty("access.backupDirectory", dir.resolveSibling(dir.getFileName() + "-readonly-recovery").toString());
+        try (AccessDatabase db = AccessDatabase.open(appObject)) {
+            check(db.isDirect() && db.isReadOnly(), "Direct open retains read-only protection for unsupported application objects");
+            expectFailure(() -> db.updateRecord("Customers", Map.of("CustomerID", 1), "City", "bypassed"),
+                "Direct unsupported-object file rejects prepared editing");
+            check(Arrays.equals(applicationHash, hash(db.recoveryBackupPath())), "Direct read-only file has a verified original recovery backup");
+        } finally {
+            if (priorBackupDirectory == null) System.clearProperty("access.backupDirectory");
+            else System.setProperty("access.backupDirectory", priorBackupDirectory);
+        }
+        check(Arrays.equals(applicationHash, hash(appObject)), "Direct read-only session leaves unsupported native objects byte-identical");
         Path encryptedFixture=root.resolve("fixtures/db2007-enc.accdb");
         byte[] encryptedHash=hash(encryptedFixture);
         expectFailure(()->AccessDatabase.openCopy(encryptedFixture,dir.resolve("encrypted-copy.accdb")),"Encrypted ACCDB fixture explicitly rejected");
         check(!Files.exists(dir.resolve("encrypted-copy.accdb")) && Arrays.equals(encryptedHash,hash(encryptedFixture)),"Encrypted rejection leaves source unchanged and creates no copy");
+        expectFailure(() -> AccessDatabase.open(encryptedFixture), "Direct encrypted database explicitly rejected before JDBC");
+        check(Arrays.equals(encryptedHash,hash(encryptedFixture)), "Rejected direct encrypted source remains byte-identical");
         if(args.length>0 && args[0].equals("--publish-fixtures")) {
             Path fixture=root.resolve("fixtures/Practice.accdb");
             if(!Files.exists(fixture)) Files.copy(working,fixture);

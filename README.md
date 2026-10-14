@@ -1,6 +1,6 @@
 # Lattice
 
-Lattice is an independent macOS desktop workspace for Access database files and local SQL. It supports native `.accdb` and `.mdb` working copies, editable datasheets, basic table and query design, and a familiar ribbon/sidebar/tab layout. The compatibility reference is Access 2016. Complete Microsoft Access parity remains a development goal.
+Lattice is an independent macOS desktop workspace for Access database files and local SQL. It supports native `.accdb` and `.mdb` files, editable datasheets, basic table and query design, and a familiar ribbon/sidebar/tab layout. The compatibility reference is Access 2016. Complete Microsoft Access parity remains a development goal.
 
 <img src="docs/brand/Lattice.png" alt="Lattice icon" width="128" height="128">
 
@@ -20,11 +20,11 @@ If the dependency folder is missing, run `./scripts/fetch-deps.sh` while online.
 
 ## Use safely
 
-1. Open an `.accdb` or supported `.mdb`, then choose a new working-copy filename. Existing files are not overwritten.
+1. **Open Database…** opens an `.accdb` or supported `.mdb` directly. Edits save to the selected file; reopening does not ask for another database filename.
 2. Expand Tables or Queries in the navigation pane. Double-click a table to view records and its field definitions.
 3. Open a SQL Query tab, enter one statement, and use **Run** or **⌘Enter**. You can run selected SQL text. Parameterized queries prompt for typed values.
-4. SQL edits affect the working copy. **Export Working Copy** creates another native Access database file. It does not replace the original.
-5. A sibling file ending in `.original-backup` retains the original bytes. To recover, close the app and copy that backup to a new `.accdb`/`.mdb` filename; keep the backup intact.
+4. **Open a Copy…** is available when you want to edit a separate working file. **Export Database Copy…** saves another native database without replacing an existing destination.
+5. Direct opening creates a verified recovery snapshot under `~/Library/Application Support/Lattice/Recovery Backups/`. Identical source bytes reuse the same snapshot; changed versions receive separate snapshots. **Database Info** shows the recovery path. To recover, close the database and copy the snapshot to a new `.accdb`/`.mdb` filename. Explicit copy sessions retain their original `.original-backup` behavior.
 
 Use **New Database…** to create a blank native Access database, or **Practice Database…** for disposable exercises with Customers and Orders, a relationship, dates, currency, Unicode and NULL values.
 

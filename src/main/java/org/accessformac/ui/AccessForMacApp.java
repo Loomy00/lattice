@@ -38,7 +38,8 @@ public final class AccessForMacApp extends JFrame {
     });
     // Only the engine thread reads or writes this field.
     private AccessDatabase database;
-    private Path originalPath, workingPath;
+    private Path originalPath, workingPath, recoveryBackupPath;
+    private boolean databaseDirect;
     private final JTabbedPane objects = new JTabbedPane();
     private final DefaultMutableTreeNode treeRoot = new DefaultMutableTreeNode("All Access Objects");
     private final DefaultTreeModel treeModel = new DefaultTreeModel(treeRoot);
@@ -70,7 +71,7 @@ public final class AccessForMacApp extends JFrame {
         @Override public String toString() { return name; }
     }
     private record Catalog(List<String> tables, List<SavedQuery> queries) {}
-    private record Opened(Path original, Path working, Catalog catalog, boolean readOnly, List<String> limitations) {}
+    private record Opened(Path original, Path working, Path recoveryBackup, Catalog catalog, boolean direct, boolean readOnly, List<String> limitations) {}
     private record TableData(List<ColumnInfo> schema, List<FieldInfo> fields, QueryResult records) {}
 
     public static void main(String[] args) {
@@ -150,6 +151,7 @@ public final class AccessForMacApp extends JFrame {
     }
 
     private static void verifyInstallation() throws Exception {
+        org.accessformac.install.RuntimeVerification.verify();
         Path scratch = Files.createTempDirectory("lattice-install-");
         try {
             Path sample = scratch.resolve("sample.accdb"), working = scratch.resolve("working.accdb");
@@ -183,10 +185,10 @@ public final class AccessForMacApp extends JFrame {
 
     private void databaseInfo() {
         if (workingPath == null) return;
-        JTextArea text = inspectionText("Native Access database\n\nWorking copy:\n" + workingPath
-                + "\n\nOriginal source (separate):\n" + originalPath
-                + "\n\nInitial backup:\n" + AccessDatabase.backupPath(workingPath)
-                + "\n\nMode: " + (databaseReadOnly ? "Read only" : "Working copy — changes persist locally")
+        JTextArea text = inspectionText("Native Access database\n\n" + (databaseDirect ? "File:\n" : "Working copy:\n") + workingPath
+                + (databaseDirect ? "" : "\n\nOriginal source (separate):\n" + originalPath)
+                + "\n\nRecovery backup:\n" + recoveryBackupPath
+                + "\n\nMode: " + (databaseReadOnly ? "Read only" : databaseDirect ? "Editing file — changes save here" : "Working copy — changes save to the copy")
                 + "\n\nExperimental native query saves create an additional pre-query backup.\nUnsupported application objects are preserved; catalog inspection does not execute them.");
         text.setColumns(65); text.setRows(16);
         JOptionPane.showMessageDialog(this, new JScrollPane(text), "Database Info", JOptionPane.INFORMATION_MESSAGE);
@@ -207,8 +209,8 @@ public final class AccessForMacApp extends JFrame {
     private JComponent ribbon() {
         Map<String, JComponent> pages = new LinkedHashMap<>();
         pages.put("File", ribbonPage(
-            group("Database", button("Open Database…", this::chooseOpen, false), button("New Database…", this::createBlank, false), button("Practice Sample…", this::createSample, false)),
-            group("Save", button("Export working copy…", this::exportCopy, true))));
+            group("Database", button("Open Database…", this::chooseOpen, false), button("Open a Copy…", this::chooseOpenCopy, false), button("New Database…", this::createBlank, false), button("Practice Sample…", this::createSample, false)),
+            group("Save", button("Export Database Copy…", this::exportCopy, true))));
         pages.put("Home", ribbonPage(
             group("Views", button("Datasheet", () -> tableView(false), true), button("Table Design", () -> tableView(true), true)),
             group("Query", button("New SQL Query", this::newQuery, true), button("Run SQL", this::runQuery, true)),
@@ -218,7 +220,7 @@ public final class AccessForMacApp extends JFrame {
             group("Queries", button("Query Builder…", this::queryDesign, true), button("New SQL Query", this::newQuery, true), button("Open SQL File…", this::openSqlFile, true)),
             unavailable("Forms / Reports", "Design and execution unavailable")));
         pages.put("External Data", ribbonPage(
-            group("Native Access file", button("Export working copy…", this::exportCopy, true)),
+            group("Native Access file", button("Export Database Copy…", this::exportCopy, true)),
             unavailable("Import / Linked tables", "Unavailable in this milestone")));
         pages.put("Database Tools", ribbonPage(
             group("Inspect", button("Table Design", () -> tableView(true), true), button("Relationships", this::relationships, true), button("Object Catalog", this::nativeObjects, true)),
@@ -303,13 +305,14 @@ public final class AccessForMacApp extends JFrame {
         JMenuBar bar = new JMenuBar();
         JMenu file = new JMenu("File");
         file.add(menuItem("Open Database…", KeyEvent.VK_O, this::chooseOpen, false));
+        file.add(menuItem("Open a Copy…", 0, this::chooseOpenCopy, false));
         file.add(menuItem("New Database…", 0, this::createBlank, false));
         file.add(menuItem("Create Practice Sample…", 0, this::createSample, false));
         file.add(menuItem("New SQL Query", KeyEvent.VK_N, this::newQuery, true));
         file.add(menuItem("Open SQL File…", 0, this::openSqlFile, true));
         file.add(menuItem("Save SQL File…", KeyEvent.VK_S, this::saveSqlFile, true));
         file.addSeparator();
-        file.add(menuItem("Export Working Copy…", 0, this::exportCopy, true));
+        file.add(menuItem("Export Database Copy…", 0, this::exportCopy, true));
         file.addSeparator();
         file.add(menuItem("Close Window", KeyEvent.VK_W, this::quit, false));
         JMenu query = new JMenu("Query");
@@ -440,7 +443,7 @@ public final class AccessForMacApp extends JFrame {
         card.add(title); card.add(Box.createVerticalStrut(16));
         card.add(new JLabel("Open a real .accdb or .mdb file, or start with the practice sample."));
         card.add(Box.createVerticalStrut(7));
-        card.add(new JLabel("Choose a working copy when opening. Your original file stays separate."));
+        card.add(new JLabel("Changes save to the file you open. Use Open a Copy to keep a separate source."));
         card.add(Box.createVerticalStrut(20));
         JPanel actions = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
         actions.setOpaque(false);
@@ -457,12 +460,19 @@ public final class AccessForMacApp extends JFrame {
         objects.addTab("Start", p);
     }
 
-    private void chooseOpen() {
+    private void chooseOpen() { chooseOpen(false); }
+
+    private void chooseOpenCopy() { chooseOpen(true); }
+
+    private void chooseOpen(boolean copy) {
         if (!idle()) return;
-        FileDialog picker = new FileDialog(this, "Open Access database", FileDialog.LOAD);
+        FileDialog picker = new FileDialog(this, copy ? "Open a copy of an Access database" : "Open Access database", FileDialog.LOAD);
         picker.setFilenameFilter((dir, name) -> isAccessFile(name));
         picker.setVisible(true);
-        if (picker.getFile() != null) requestOpen(Path.of(picker.getDirectory(), picker.getFile()));
+        if (picker.getFile() == null) return;
+        Path source = Path.of(picker.getDirectory(), picker.getFile());
+        if (copy) withUnsavedChanges(null, () -> openDatabaseCopy(source));
+        else requestOpen(source);
     }
 
     private static boolean isAccessFile(String name) {
@@ -473,29 +483,50 @@ public final class AccessForMacApp extends JFrame {
     private void requestOpen(Path source) {
         if (closing) return;
         if (jobs != 0) { pendingOpens.add(source); return; }
+        // Reopening the current document must not discard SQL tabs or create a second connection.
+        try {
+            if (workingPath != null && Files.isSameFile(source, workingPath)) {
+                status.setText("Already open: " + workingPath.getFileName());
+                toFront();
+                return;
+            }
+        } catch (java.io.IOException ignored) { /* The normal open validation explains missing/inaccessible files. */ }
         withUnsavedChanges(null, () -> openDatabase(source));
     }
 
-    private void openDatabase(Path source) {
+    private Path checkedSource(Path source) {
         Path original = source.toAbsolutePath().normalize();
         if (!Files.isRegularFile(original) || !isAccessFile(original.getFileName().toString())) {
             error("Open database", new IllegalArgumentException("Choose an existing .accdb or .mdb file."));
-            return;
+            return null;
         }
+        return original;
+    }
+
+    private void openDatabase(Path source) {
+        Path selected = checkedSource(source);
+        if (selected == null) return;
+        submit("Opening database…", () -> prepareDatabase(AccessDatabase.open(selected)), this::opened);
+    }
+
+    private void openDatabaseCopy(Path source) {
+        Path original = checkedSource(source);
+        if (original == null) return;
         String file = original.getFileName().toString();
         int dot = file.lastIndexOf('.');
-        Path target = chooseDestination("Choose a new working copy — original will remain separate",
+        Path target = chooseDestination("Create and open a working copy",
                 file.substring(0, dot) + "-working" + file.substring(dot), original.getParent());
-        if (target == null) return;
-        if (!sameFileType(original, target)) return;
-        if (!safeNewDestination(original, target)) return;
-        submit("Opening working copy…", () -> {
-            AccessDatabase candidate = AccessDatabase.openCopy(original, target);
-            try {
-                Catalog catalog = catalog(candidate);
-                return replaceDatabase(candidate, catalog);
-            } catch (Exception e) { candidate.close(); throw e; }
-        }, this::opened);
+        if (target == null || !sameFileType(original, target) || !safeNewDestination(original, target)) return;
+        submit("Opening working copy…", () -> prepareDatabase(AccessDatabase.openCopy(original, target)), this::opened);
+    }
+
+    private Opened prepareDatabase(AccessDatabase candidate) throws Exception {
+        try { return replaceDatabase(candidate, catalog(candidate)); }
+        catch (Exception | LinkageError failure) {
+            try { candidate.close(); }
+            catch (Exception closeFailure) { failure.addSuppressed(closeFailure); }
+            throw failure;
+        }
     }
 
     private void createSample() {
@@ -508,14 +539,9 @@ public final class AccessForMacApp extends JFrame {
         withUnsavedChanges(null, () -> {
             Path source = chooseDestination("Create a new native Access database", "Database.accdb", null);
             if (source == null || !safeNewDestination(null, source)) return;
-            String filename = source.getFileName().toString(); int dot = filename.lastIndexOf('.');
-            Path work = source.resolveSibling(filename.substring(0, dot) + "-working" + filename.substring(dot));
-            if (!safeNewDestination(source, work)) return;
             submit("Creating blank native database…", () -> {
                 AccessDatabase.createBlank(source);
-                AccessDatabase candidate = AccessDatabase.openCopy(source, work);
-                try { return replaceDatabase(candidate, catalog(candidate)); }
-                catch (Exception failure) { candidate.close(); throw failure; }
+                return prepareDatabase(AccessDatabase.open(source));
             }, this::opened);
         });
     }
@@ -527,16 +553,9 @@ public final class AccessForMacApp extends JFrame {
             error("Sample file", new IllegalArgumentException("The practice sample must have an .accdb extension."));
             return;
         }
-        String file = sample.getFileName().toString();
-        Path work = sample.resolveSibling(file.substring(0, file.lastIndexOf('.')) + "-working.accdb");
-        if (!safeNewDestination(sample, work)) return;
         submit("Creating practice sample…", () -> {
             AccessDatabase.createSample(sample);
-            AccessDatabase candidate = AccessDatabase.openCopy(sample, work);
-            try {
-                Catalog catalog = catalog(candidate);
-                return replaceDatabase(candidate, catalog);
-            } catch (Exception e) { candidate.close(); throw e; }
+            return prepareDatabase(AccessDatabase.open(sample));
         }, value -> {
             opened(value);
             addQuery("Practice: customers by city", "SELECT City, Count(*) AS CustomerCount\nFROM Customers\nGROUP BY City\nORDER BY City;", null);
@@ -585,25 +604,28 @@ public final class AccessForMacApp extends JFrame {
         List<String> limitations = new ArrayList<>(candidate.limitations());
         if (previous != null) {
             try { previous.close(); }
-            catch (Exception e) { limitations.add("Previous copy was flushed, but closing it failed: " + e.getMessage()); }
+            catch (Exception e) { limitations.add("Previous database was saved, but closing it failed: " + e.getMessage()); }
         }
-        return new Opened(candidate.originalPath(), candidate.workingPath(), catalog, candidate.isReadOnly(), limitations);
+        return new Opened(candidate.originalPath(), candidate.workingPath(), candidate.recoveryBackupPath(), catalog, candidate.isDirect(), candidate.isReadOnly(), limitations);
     }
 
     private void opened(Opened value) {
         originalPath = value.original;
         workingPath = value.working;
         databaseReadOnly = value.readOnly;
+        databaseDirect = value.direct;
+        recoveryBackupPath = value.recoveryBackup;
         nativeCatalog = null; rememberedSelection = null; collapsedNavigationGroups.clear();
         objects.removeAll(); openObjects.clear();
         fillNavigation(value.catalog);
         setTitle(workingPath.getFileName() + " — Lattice");
         documentTitle.setText(workingPath.getFileName().toString()); documentTitle.setToolTipText(workingPath.toString());
         documentSubtitle.setText("Native Access database · " + value.catalog.tables.size() + " tables");
-        documentBadge.setText(value.readOnly ? "Read only" : "Working copy"); documentBadge.setToolTipText(value.readOnly ? String.join("; ", value.limitations) : "All changes affect the separate working copy");
+        documentBadge.setText(value.readOnly ? "Read only" : value.direct ? "Editing file" : "Working copy");
+        documentBadge.setToolTipText(value.readOnly ? String.join("; ", value.limitations) : value.direct ? "Changes save to this file. Recovery backup: " + value.recoveryBackup : "Changes save to the separate working copy. Recovery backup: " + value.recoveryBackup);
         documentBadge.setForeground(value.readOnly ? MAROON : MUTED);
-        paths.setText((value.readOnly ? "READ ONLY — " : "") + "Working copy: " + workingPath + "    |    Original: " + originalPath);
-        paths.setToolTipText(value.limitations.isEmpty() ? "SQL changes persist to the working copy. Export creates another native Access file." : String.join("; ", value.limitations));
+        paths.setText((value.readOnly ? "READ ONLY — " : "") + (value.direct ? "File: " + workingPath : "Working copy: " + workingPath + "    |    Original: " + originalPath));
+        paths.setToolTipText((value.readOnly ? "Read only. " : value.direct ? "Changes save to this file. " : "Changes save to the working copy. ") + "Recovery backup: " + value.recoveryBackup + (value.limitations.isEmpty() ? "" : " — " + String.join("; ", value.limitations)));
         if (value.catalog.tables.isEmpty()) {
             JPanel panel = new JPanel(new GridBagLayout()); panel.setBackground(Color.WHITE);
             JPanel card = new JPanel(); card.setOpaque(false); card.setLayout(new BoxLayout(card, BoxLayout.Y_AXIS));
@@ -611,12 +633,12 @@ public final class AccessForMacApp extends JFrame {
             card.add(title); card.add(Box.createVerticalStrut(14)); card.add(new JLabel("Create a table to add fields and records.")); card.add(Box.createVerticalStrut(18));
             card.add(button("Create Table…", this::createTable, true)); panel.add(card); objects.addTab("New Database", panel);
         } else addQuery("Query1", "SELECT * FROM " + identifier(value.catalog.tables.get(0)) + ";", null);
-        status.setText("Opened " + workingPath.getFileName() + (value.readOnly ? " — read only: " + String.join("; ", value.limitations) : " — all changes affect the working copy."));
+        status.setText("Opened " + workingPath.getFileName() + (value.readOnly ? " — read only: " + String.join("; ", value.limitations) : value.direct ? " — changes save to this file. Recovery backup created automatically." : " — changes save to the working copy."));
         if (!value.readOnly && !value.limitations.isEmpty()) JOptionPane.showMessageDialog(this, String.join("\n", value.limitations), "Database limitations", JOptionPane.WARNING_MESSAGE);
         submit("Reading native object catalog…", () -> AccessObjectCatalog.inspect(database.workingPath()), snapshot -> {
             nativeCatalog = snapshot;
             fillNavigation(currentCatalog);
-            status.setText("Native catalog loaded. Application objects are available for inspection only.");
+            status.setText(databaseReadOnly ? "Native catalog loaded — read only. Application objects are available for inspection only." : databaseDirect ? "Changes save to this file. Automatic recovery backup available in Database Info." : "Working copy ready. Original source remains separate.");
         });
     }
 
@@ -734,7 +756,7 @@ public final class AccessForMacApp extends JFrame {
             if (values == null) return;
             executeQuery(query, statement, values);
         } catch (IllegalArgumentException invalid) { error("Query parameters", invalid); }
-        catch (Exception invalid) { error("Query parameters", invalid); }
+        catch (Exception | LinkageError invalid) { error("Query parameters", invalid); }
     }
 
     private void executeQuery(QueryPanel query, String statement, List<Object> values) {
@@ -782,7 +804,7 @@ public final class AccessForMacApp extends JFrame {
         if (databaseReadOnly) { status.setText("This database is read only; native query saving is unavailable."); return; }
         JTextField name = new JTextField(query.savedName == null ? "MyQuery" : query.savedName + "Copy", 26);
         JPanel panel = new JPanel(new BorderLayout(8, 12));
-        JTextArea note = new JTextArea("Experimental native Access query saving\n\nSupported: one local table SELECT, expressions, WHERE,\nGROUP BY, HAVING and ORDER BY. Joins, parameters, UNION\nand advanced designs are not supported by this writer.\n\nA full pre-query backup is created before changing the copy.\nVerified with Jackcess/UCanAccess; Windows Access reopening\nhas not been verified. Save SQL File remains a separate fallback.");
+        JTextArea note = new JTextArea("Experimental native Access query saving\n\nSupported: one local table SELECT, expressions, WHERE,\nGROUP BY, HAVING and ORDER BY. Joins, parameters, UNION\nand advanced designs are not supported by this writer.\n\nA full pre-query backup is created before changing the database.\nVerified with Jackcess/UCanAccess; Windows Access reopening\nhas not been verified. Save SQL File remains a separate fallback.");
         note.setEditable(false); note.setOpaque(false); note.setFont(note.getFont().deriveFont(12f));
         panel.add(note, BorderLayout.CENTER); panel.add(name, BorderLayout.SOUTH);
         if (JOptionPane.showConfirmDialog(this, panel, "Save Native Query — Experimental", JOptionPane.OK_CANCEL_OPTION, JOptionPane.WARNING_MESSAGE) != JOptionPane.OK_OPTION) return;
@@ -875,7 +897,7 @@ public final class AccessForMacApp extends JFrame {
         }, value -> {
             fillNavigation(value.getKey());
             if (selected instanceof TablePanel t && value.getValue() != null) t.load(value.getValue());
-            status.setText("Objects refreshed from the working copy.");
+            status.setText("Objects refreshed from the database.");
         });
     }
 
@@ -885,10 +907,10 @@ public final class AccessForMacApp extends JFrame {
         String sql = TableDesignDialog.show(this);
         if (sql == null) return;
         List<String> before = currentCatalog.tables;
-        submit("Creating table in working copy…", () -> {
+        submit("Creating table in database…", () -> {
             database.execute(sql); database.flush(); return catalog(database);
         }, created -> {
-            fillNavigation(created); status.setText("Table created in the working copy.");
+            fillNavigation(created); status.setText("Table created in the database.");
             created.tables.stream().filter(table -> !before.contains(table)).findFirst().ifPresent(this::openTable);
         });
     }
@@ -920,7 +942,7 @@ public final class AccessForMacApp extends JFrame {
             JLabel hint = new JLabel(" " + relationships.size() + " native relationship(s). Inspector only; relationship creation/deletion is unavailable.");
             hint.setBorder(new EmptyBorder(8, 8, 8, 8)); panel.add(hint, BorderLayout.SOUTH);
             objects.addTab("Relationships", panel); objects.setSelectedComponent(panel);
-            status.setText("Relationships inspected from the native working copy.");
+            status.setText("Relationships inspected from the native database.");
         });
     }
 
@@ -1015,9 +1037,9 @@ public final class AccessForMacApp extends JFrame {
         if (!ready()) return;
         String name = workingPath.getFileName().toString();
         int dot = name.lastIndexOf('.');
-        Path target = chooseDestination("Export a native Access file from the working copy", name.substring(0, dot) + "-export" + name.substring(dot), workingPath.getParent());
+        Path target = chooseDestination("Export a native Access database copy", name.substring(0, dot) + "-export" + name.substring(dot), workingPath.getParent());
         if (target == null || !sameFileType(workingPath, target) || !safeNewDestination(originalPath, target) || !safeNewDestination(workingPath, target)) return;
-        submit("Exporting native Access working copy…", () -> {
+        submit("Exporting native Access database copy…", () -> {
             database.flush();
             Files.copy(database.workingPath(), target);
             return target;
@@ -1025,7 +1047,7 @@ public final class AccessForMacApp extends JFrame {
     }
 
     private void showExercises() {
-        JTextArea text = new JTextArea("Practice with the disposable working copy:\n\n1. SELECT FullName, City FROM Customers ORDER BY FullName;\n\n2. SELECT City, Count(*) AS CustomerCount\n   FROM Customers GROUP BY City;\n\n3. SELECT Customers.FullName, Orders.Amount\n   FROM Customers INNER JOIN Orders\n   ON Customers.CustomerID = Orders.CustomerID;\n\n4. SELECT * FROM Orders WHERE Amount > 100;\n\n5. PARAMETERS [Chosen City] Text;\n   SELECT * FROM Customers WHERE City = [Chosen City];\n\nUse SQL View for INSERT, UPDATE, DELETE, SELECT INTO and DDL.\nRun SQL with ⌘Enter; save SQL text separately with ⌘S.\nNative saved-query writing is explicitly experimental and limited.\nSample source and working copy are separate files.");
+        JTextArea text = new JTextArea("Practice with this sample database:\n\n1. SELECT FullName, City FROM Customers ORDER BY FullName;\n\n2. SELECT City, Count(*) AS CustomerCount\n   FROM Customers GROUP BY City;\n\n3. SELECT Customers.FullName, Orders.Amount\n   FROM Customers INNER JOIN Orders\n   ON Customers.CustomerID = Orders.CustomerID;\n\n4. SELECT * FROM Orders WHERE Amount > 100;\n\n5. PARAMETERS [Chosen City] Text;\n   SELECT * FROM Customers WHERE City = [Chosen City];\n\nUse SQL View for INSERT, UPDATE, DELETE, SELECT INTO and DDL.\nRun SQL with ⌘Enter; save SQL text separately with ⌘S.\nNative saved-query writing is explicitly experimental and limited.\nChanges save directly to the sample file you created.");
         text.setEditable(false); text.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 13));
         text.setBorder(new EmptyBorder(20, 20, 20, 20));
         objects.addTab("Practice exercises", new JScrollPane(text));
@@ -1035,7 +1057,7 @@ public final class AccessForMacApp extends JFrame {
         JOptionPane.showMessageDialog(this,
             "Lattice — independent Access-compatible desktop application\n\n"
             + "Real .accdb/.mdb files and Access SQL through UCanAccess / Jackcess.\n"
-            + "Changes are saved to an explicit working copy.\n"
+            + "Changes save to the file you open. Open a Copy keeps a separate source.\nAn automatic recovery backup is available in Database Info.\n"
             + "Basic primary-key tables support cell editing, insertion and deletion.\n"
             + "Basic table creation, field addition and a SELECT query builder are available.\n"
             + "Existing native saved queries can be read; limited native query writing is experimental.\n"
@@ -1083,7 +1105,7 @@ public final class AccessForMacApp extends JFrame {
                 try { finished.accept(get()); }
                 catch (InterruptedException e) { Thread.currentThread().interrupt(); error(message, e); }
                 catch (ExecutionException e) { error(message, e.getCause()); }
-                catch (RuntimeException e) { error(message, e); }
+                catch (RuntimeException | LinkageError e) { error(message, e); }
                 finally {
                     jobs--;
                     if (jobs == 0 && closing && isDisplayable()) closing = false;
@@ -1097,13 +1119,29 @@ public final class AccessForMacApp extends JFrame {
     }
 
     private void error(String action, Throwable failure) {
-        String message = failure.getMessage();
-        if (message == null || message.isBlank()) message = failure.getClass().getSimpleName();
+        String message = errorMessage(failure);
         status.setText("Failed: " + message);
         JTextArea detail = new JTextArea(message, 7, 65);
         detail.setEditable(false); detail.setLineWrap(true); detail.setWrapStyleWord(true);
         detail.setCaretPosition(0);
         JOptionPane.showMessageDialog(this, new JScrollPane(detail), action, JOptionPane.ERROR_MESSAGE);
+    }
+
+    private static String errorMessage(Throwable failure) {
+        Set<Throwable> seen = Collections.newSetFromMap(new IdentityHashMap<>());
+        for (Throwable cause = failure; cause != null && seen.add(cause); cause = cause.getCause()) {
+            String detail = String.valueOf(cause.getMessage());
+            if (detail.contains("javax/script/") || detail.contains("javax.script.") || detail.contains("java.scripting")) {
+                return "This Lattice installation is missing a component required to open some Access databases. "
+                    + "Install the updated Lattice app, then reopen your database. Your database has not been renamed or moved.";
+            }
+        }
+        if (failure instanceof LinkageError) {
+            return "This Lattice installation is missing a required database component. "
+                + "Install the updated Lattice app, then try again.";
+        }
+        String message = failure.getMessage();
+        return message == null || message.isBlank() ? failure.getClass().getSimpleName() : message;
     }
 
     private void quit() {
@@ -1114,11 +1152,11 @@ public final class AccessForMacApp extends JFrame {
 
     private void beginQuit() {
         closing = true;
-        submit("Saving and closing working copy…", () -> {
+        submit("Saving and closing database…", () -> {
             if (database != null) { database.flush(); database.close(); database = null; }
             return null;
         }, unused -> { engine.shutdown(); dispose(); });
-        // A failed flush must keep the window and working-copy path available for recovery.
+        // A failed flush must keep the window and database path available for recovery.
     }
 
     private void installDesktopHandlers() {
@@ -1164,7 +1202,7 @@ public final class AccessForMacApp extends JFrame {
     }
 
     private static String rowSummary(QueryResult result) {
-        if (result.columns().isEmpty()) return result.updateCount() + " record(s) affected — saved to the working copy.";
+        if (result.columns().isEmpty()) return result.updateCount() + " record(s) affected — saved to the database file.";
         return result.rows().size() + " row(s)" + (result.truncated() ? " shown — result limit reached; more rows exist." : " returned.");
     }
 
@@ -1313,7 +1351,7 @@ public final class AccessForMacApp extends JFrame {
                 Map<String, Object> keys = keys(row);
                 submit("Updating record in " + name + "…", () -> {
                     database.updateRecord(name, keys, field.name(), value); database.flush(); return loadTable(name);
-                }, updated -> { load(updated); status.setText("Record updated — saved to the working copy."); });
+                }, updated -> { load(updated); status.setText("Record updated — saved to the database file."); });
             } catch (IllegalArgumentException invalid) { error("Field value", invalid); }
         }
         void setSelectedNull() {
@@ -1341,7 +1379,7 @@ public final class AccessForMacApp extends JFrame {
                     }
                     submit("Inserting record into " + name + "…", () -> {
                         database.insertRecord(name, valuesToInsert); database.flush(); return loadTable(name);
-                    }, inserted -> { load(inserted); status.setText("Record inserted — saved to the working copy."); });
+                    }, inserted -> { load(inserted); status.setText("Record inserted — saved to the database file."); });
                     return;
                 } catch (IllegalArgumentException invalid) { error("Record values", invalid); }
             }
@@ -1349,10 +1387,10 @@ public final class AccessForMacApp extends JFrame {
         void deleteRecord() {
             if (!ready() || databaseReadOnly || records.getSelectedRow() < 0 || !hasPrimaryKey()) return;
             Map<String, Object> keys = keys(records.convertRowIndexToModel(records.getSelectedRow()));
-            if (JOptionPane.showConfirmDialog(AccessForMacApp.this, "Delete the selected record from the working copy?\n" + keys + "\n\nThe original file remains separate.", "Delete Record", JOptionPane.OK_CANCEL_OPTION, JOptionPane.WARNING_MESSAGE) != JOptionPane.OK_OPTION) return;
+            if (JOptionPane.showConfirmDialog(AccessForMacApp.this, "Delete the selected record from this database?\n" + keys + (databaseDirect ? "\n\nThis changes the open file." : "\n\nThe original source remains separate."), "Delete Record", JOptionPane.OK_CANCEL_OPTION, JOptionPane.WARNING_MESSAGE) != JOptionPane.OK_OPTION) return;
             submit("Deleting record from " + name + "…", () -> {
                 database.deleteRecord(name, keys); database.flush(); return loadTable(name);
-            }, deleted -> { load(deleted); status.setText("Record deleted — saved to the working copy."); });
+            }, deleted -> { load(deleted); status.setText("Record deleted — saved to the database file."); });
         }
         void addField() {
             if (!ready() || databaseReadOnly) return;
@@ -1368,7 +1406,7 @@ public final class AccessForMacApp extends JFrame {
         void alter(String sql, String message) {
             submit("Changing table design…", () -> {
                 database.execute(sql); database.flush(); return loadTable(name);
-            }, changed -> { load(changed); status.setText(message + " — saved to the working copy."); });
+            }, changed -> { load(changed); status.setText(message + " — saved to the database file."); });
         }
     }
 }

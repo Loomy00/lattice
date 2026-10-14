@@ -78,3 +78,9 @@ For complex objects, “discover” can mean a resource/API clue; “open” mea
 The present app is an initial native-file SQL/database milestone with major Access authoring/application-object gaps. It is not full Access parity. The broad goal remains table/query/relationship designers, imports/exports, forms/reports/macros, and tested native preservation.
 
 Before expanding write eligibility, obtain native fixtures containing forms, reports, macros, modules, validation rules/defaults, uncommon collations, complex fields, and encryption. Compare original and mutated copies in Windows Access: object inventory, SaveAsText exports, execution/printing, data results, and Compact/Repair behavior. Keep advanced files read-only or refused where supported mutations cannot yet be proved safe. Do not label any Windows check passed until actual evidence is saved.
+
+## 1.0.2 direct opening and runtime regression
+
+Normal Open edits the selected native file, with verified automatic content-addressed recovery snapshots. Explicit Open a Copy remains available and preserves its original/copy isolation. Reopening unchanged files reuses snapshots rather than creating more user-facing working filenames. Both ACCDB and MDB direct persistence, backup reuse/refusal, and unsupported-file read-only behavior have regression coverage.
+
+The packaged runtime includes `java.scripting`; generated MDB default expressions and validation metadata are exercised by every installation self-check. Full-JDK-only checks are insufficient because jpackage can omit lazily loaded modules. The package and installed application passed the generated-expression MDB proof and private supplied-MDB opening checks. SQL validation failures can invalidate a UCanAccess backing channel; general transactional recovery after driver failures remains a separate limitation.

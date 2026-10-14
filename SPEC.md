@@ -18,10 +18,10 @@ Swing offers a practical installable desktop baseline with native window control
 
 ## Safety and persistence
 
-- Opening a user database creates a distinct working copy; never edit the original.
-- Refuse accidental overwrite of a working file. Display original and working paths.
+- Normal Open edits the selected database directly and creates a verified recovery snapshot in the app's backup directory. Reopening unchanged data reuses its snapshot and requires no duplicate filename.
+- Open a Copy explicitly creates a distinct working file and retains the original. Refuse overwriting existing copy/export destinations. Display the active database and recovery paths.
 - Treat linked databases, encryption, unsupported complex objects and concurrency as explicit compatibility questions. Do not infer safety from successful table listing.
-- SQL edits persist in the working ACCDB. Exporting a database means copying that native file, not converting it to CSV or SQLite.
+- SQL edits persist in the active native database. Exporting a database means copying that file, not converting it to CSV or SQLite.
 - Preserve the copied original as recovery evidence. Surface failures; do not silently report an operation as saved.
 - Unsupported forms, reports, VBA and macros must not be presented as executable. Preservation after mutations must be tested on representative original Access fixtures before claiming support.
 

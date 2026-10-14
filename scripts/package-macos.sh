@@ -7,7 +7,7 @@ if [ "$(uname -s)" != Darwin ]; then
     printf '%s\n' 'macOS packaging requires a macOS host with Java 17 jpackage.' >&2
     exit 1
 fi
-APP_VERSION=${ACCESS_APP_VERSION:-1.0.1}
+APP_VERSION=${ACCESS_APP_VERSION:-1.0.2}
 PACKAGE_TYPE=${1:-app-image}
 case "$PACKAGE_TYPE" in app-image|dmg) ;; *) printf '%s\n' 'Usage: scripts/package-macos.sh [app-image|dmg]' >&2; exit 1 ;; esac
 JAVA_HOME_PACKAGE=${ACCESS_JAVA_HOME:-/Library/Java/JavaVirtualMachines/zulu-17.jdk/Contents/Home}
@@ -18,6 +18,20 @@ if [ ! -x "$JAVA_HOME_PACKAGE/bin/jpackage" ]; then
 fi
 if [ "${ACCESS_SKIP_BUILD:-0}" != 1 ]; then ./scripts/build.sh; fi
 if [ ! -f build/access-for-mac.jar ]; then printf '%s\n' 'Run scripts/build.sh first.' >&2; exit 1; fi
+# Jackcess resolves Access defaults and validation rules through javax.script, even
+# though it does not require an external JavaScript engine. Keep that JDK module.
+RUNTIME_MODULES=java.desktop,java.sql,java.naming,java.logging,java.management,java.scripting,jdk.unsupported
+DETECTED_MODULES=$("$JAVA_HOME_PACKAGE/bin/jdeps" --multi-release 17 --recursive \
+    --ignore-missing-deps --print-module-deps --class-path 'lib/*' build/access-for-mac.jar)
+for required_module in $(printf '%s\n' "$DETECTED_MODULES" | tr ',' ' '); do
+    case ",$RUNTIME_MODULES," in
+        *",$required_module,"*) ;;
+        *) if [ "$required_module" != java.base ]; then
+               printf 'Packaging runtime is missing detected JDK module: %s\n' "$required_module" >&2
+               exit 1
+           fi ;;
+    esac
+done
 mkdir -p build/mac build/package-work
 STAGING_DIR=$(mktemp -d "$PROJECT_DIR/build/package-work/input.XXXXXX")
 PACKAGE_OUTPUT=$(mktemp -d "${TMPDIR:-/tmp}/access-for-mac-package.XXXXXX")
@@ -56,7 +70,7 @@ if [ -d "$APP_IMAGE" ]; then rm -rf "$APP_IMAGE"; fi
     --main-class org.accessformac.ui.AccessForMacApp \
     --icon "$PACKAGE_OUTPUT/Lattice.icns" \
     --dest "$PACKAGE_OUTPUT" \
-    --add-modules java.desktop,java.sql,java.naming,java.logging,java.management,jdk.unsupported \
+    --add-modules "$RUNTIME_MODULES" \
     --mac-package-identifier org.accessformac.desktop \
     --mac-package-name Lattice \
     --mac-app-category productivity \
@@ -70,6 +84,7 @@ ARCHIVE_NAME="Lattice-$APP_VERSION-$(uname -m).zip"
 mkdir -p "$PACKAGE_OUTPUT/archive-check"
 /usr/bin/ditto -x -k "$PACKAGE_OUTPUT/$ARCHIVE_NAME" "$PACKAGE_OUTPUT/archive-check"
 /usr/bin/codesign --verify --deep --strict "$PACKAGE_OUTPUT/archive-check/Lattice.app"
+"$PACKAGE_OUTPUT/archive-check/Lattice.app/Contents/MacOS/Lattice" --verify-install
 cp "$PACKAGE_OUTPUT/$ARCHIVE_NAME" "$PROJECT_DIR/build/mac/$ARCHIVE_NAME"
 # File-provider folders may attach FinderInfo while an app is being created, causing codesign
 # to fail. Finish jpackage's ad-hoc signing in system temp, then copy the finished bundle.

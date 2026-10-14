@@ -29,3 +29,13 @@ The 2026-10-13 refinement preserves the database API and adds explicit command l
 Public source repository: https://github.com/Loomy00/lattice. Binaries, personal database files, supplied reference material and raw machine-specific logs are excluded. `LEGAL.md`, `NOTICE`, and `licenses/THIRD-PARTY.md` describe publication boundaries and dependency obligations. First-party license terms remain unselected. Public installer distribution is pending bundled-runtime corresponding-source compliance.
 
 Local 1.0.1 packages include the updated notices and passed installation self-verification, app/ZIP signature checks and DMG checksum verification. These packages remain local until the runtime redistribution arrangements in LEGAL.md are complete.
+
+## 1.0.2 opening fix (2026-10-14)
+
+The reduced Java runtime omitted `java.scripting`, causing `javax/script/Bindings` linkage failure when opening MDB files containing field defaults/validation expressions. Reproduction on a private supplied-file copy distinguished the full JDK from the old packaged runtime. The runtime now includes that module and packaging checks inferred module dependencies. The installation self-check covers a generated MDB with persisted defaults and validation, SQL updates/defaulted inserts, native reopen, and direct opening, in addition to the ACCDB proof.
+
+Normal Open now uses the selected database directly. Recovery snapshots are verified before JDBC opening, stored in the app recovery directory, and reused when source bytes are unchanged. Open a Copy retains explicit source/destination behavior. New blank and practice files no longer create an extra working database automatically. Mode badges and Database Info describe direct/copy/read-only mode and show the recovery path.
+
+The final complete regression passed 232 assertions: 166 database, 28 UI generator/value, 19 object-catalog and 19 native-design checks. The new bundled runtime also opened/read and persisted synthetic edits in a private supplied-MDB copy. The supplied original's SHA-256 remained unchanged. No supplied database or data rows are included in Git.
+
+Version 1.0.2 was installed at `/Applications/Lattice.app`, replacing the former 1.0.0 app. The installed signature/version and `--verify-install` checks passed. Native UI verification opened a private copy directly, displayed three tables with the Editing file badge, and showed no duplicate-destination dialog. Local ZIP and DMG checks passed; public binary redistribution boundaries in LEGAL.md remain unchanged.

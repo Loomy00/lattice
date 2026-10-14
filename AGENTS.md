@@ -11,7 +11,7 @@ User explicitly requests subagents for most work. Preferred implementation/resea
 - UI agent: src/main/java/org/accessformac/ui/, scripts/package-macos.sh only.
 - Lead: SPEC.md, PROGRESS.md, README.md, integration fixes after communicating ownership.
 
-Java 17 is installed on Apple Silicon. Prefer JDBC with UCanAccess/Jackcess, pending compatibility proof. No ongoing AI dependency. No SQLite substitution. Keep downloads reproducible and version-pinned. Do not modify user databases: use explicit working copies with a backup and recovery path. Unsupported application objects must be preserved and honestly described.
+Java 17 is installed on Apple Silicon. Prefer JDBC with UCanAccess/Jackcess, pending compatibility proof. No ongoing AI dependency. No SQLite substitution. Keep downloads reproducible and version-pinned. The user's 2026-10-14 instruction supersedes the former copy-only opening rule: normal Open edits the selected database, with a verified automatic recovery backup stored by the app. Offer Open a Copy explicitly; do not force new duplicate filenames on each open. Diagnostic and regression work on user-supplied files still uses scratch copies and verifies the supplied original is unchanged. Unsupported application objects must be preserved and honestly described.
 
 ## Engine/UI contract
 Provide org.accessformac.db.AccessDatabase implementing AutoCloseable:
